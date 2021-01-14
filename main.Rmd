@@ -1,0 +1,173 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+```{r}
+library("plyr")
+library("fitdistrplus")
+
+```
+
+> ### Research aim
+
+The aim of our research is to discover which factors are the most important for the high life expectancy of citizens of a specific country.
+
+> #### Research Plan
+
+1. Try to fit life expectancy to some known distribution.
+2. Discover which parameters life expectancy depends on and how
+
+> #### Data
+
+  Data which we use we took from the website [kaggle](https://www.kaggle.com/kumarajarshi/life-expectancy-who). They consist of more than 15 features which are enough to analyze what affects life expectancy most in specific country.  
+
+> #### Life expectancy distribution overview 
+
+Let's firstly plot our data to have approximate knowledge about possible distributions to fit
+```{r}
+# reading data from file
+data <- read.csv("data.csv")
+```
+
+
+```{r}
+# extracting life expectancy data from frame
+x <- data$life_expectancy*100
+# setting frequency of splitting
+brks <- (max(x) - min(x))
+# creating histogram
+h<-hist(x, breaks=brks, col="red", xlab="Years",
+   main="Distribution of life expectancy")
+```
+Now we can say that it's not normal distribution because it's not symmetric relative to the mean. To take a more deep analysis of possible distributions we will use a function that creates a plot of skewness/kurtosis.
+```{r}
+descdist(data$life_expectancy*100, boot=1000)
+```
+
+Аs we can see data has distribution close to the gamma, lognormal and weibull distributions. Now our task is to test which one distribution are the most probable. Function fitdist fits given distribution parameters by maximum likelihood.
+```{r}
+#fit gamma
+fg <- fitdist(x, "gamma")
+#fit lognormal
+fn <- fitdist(x, "lnorm")
+# fit weibull
+fw <- fitdist(x, "weibull")
+
+fits.list <- list(fw, fn, fg)
+```
+
+After we fitted probable distributions we can compare our fits.
+```{r}
+plot.legend <- c("Weibull", "lognormal", "gamma")
+denscomp(fits.list)
+qqcomp(fits.list)
+cdfcomp(fits.list)
+ppcomp(fits.list)
+```
+We can see that in four plots weibull distribution fit to the distribution of life expectancy the best. Now let's test how e.c.d.f fits the theoretical c.d.f. To do this we will use the Kolmogorov-Smirnov test.
+
+```{r}
+gofstat(list(fw, fg, fn))
+```
+As we can see from previous statistical weibull distribution is the closest to our real data.
+
+```{r}
+# test for weibull distribution
+ks.test(x ,"pweibull", fw$estimate[2], fw$estimate[1])
+
+# test for gamma distribution
+ks.test(x ,"pgamma", fg$estimate[2], fg$estimate[1])  
+
+# test for lognormal distribution
+ks.test(x ,"plnorm", fn$estimate[2], fn$estimate[1])  
+
+```
+Tests also shows that weibull distribution is the closest. Because we tested if our data have specific distribution and we got that probability that it's weibull distribution the highest.
+
+> ### Which parameters life expectancy depends on
+
+```{r}
+data <- read.csv("data.csv")
+source("http://www.sthda.com/upload/rquery_cormat.r")
+rquery.cormat(data)
+```
+
+Here we are only looking at correlation between life_expectancy and other data.
+We can see that most influential on life expectancy is school, which is quite expected, because school level can give as information about level of development of the country ,and hiv, so countries with more HIV patients have much lower life expectancy.
+We decided to test if there is any linear dependency between school level, and life expectancy.
+We know that we have linear dependency between two data if abs(Cor(X,Y)) = 1, and in our case correlation between life_expectancy and school equal 0.73, which is far enough from 1, but we will check it.
+Firstly we will draw plots to show dependency between this two parameters
+```{r}
+plot(100 * data$life_expectancy,data$school,xlab = 'Life Expectancy', ylab = 'School',main = 'Dependency between school and life expectency',col = 'green')
+lines(c(0,90),c(-0.5,0.9),type='l',col='black')
+```
+
+Next step, is to get for every life_expectency mean school value
+```{r}
+sums = rep(0,500)
+counts = rep(0,500)
+for(i in c(1:length(data$life_expectancy))){
+  sums[data$life_expectancy[i] * 1000 - 400] =  sums[data$life_expectancy[i] * 1000- 400] + data$school[i]
+  counts[data$life_expectancy[i] * 1000 -400] =  counts[data$life_expectancy[i] * 1000 - 400] + 1
+
+}
+
+means = rep(0,500)
+for(i in c(1:length(sums))){
+  if(counts[i]!=0){
+    means[i] = sums[i]/counts[i]
+  }
+}
+```
+
+Now we will draw this plot 
+```{r}
+plot(c(500:999)/10,means,ylab = 'School', xlab = 'Life Expectancy')
+lines(c(50,100),c(0.15,0.9),type='l',col='black')
+```
+
+
+
+
+We get a lot of data with zeros, so we decided to put this values equal to theoretical(value which we get if put x into linear equation)
+
+```{r}
+for(i in c(1:length(means))){
+ if(means[i]==0){
+   means[i] = 0.15 + (i)*0.75/500
+ } 
+}
+```
+
+And plot it again.
+
+```{r}
+plot(c(500:999)/10,means,ylab = 'School', xlab = 'Life Expectancy')
+lines(c(50,100),c(0.15,0.9),type='l',col='black')
+```
+
+Our result after removing zeros, starts to look like some linear equation, but results in the start of the plot, told us 
+that these data are not linear, so our hypothesis is false.
+
+
+
+```{r}
+plot(100 * data$life_expectancy,1293859294 * data$population,xlab = 'Life Expectancy', ylab = 'Population',main = 'Dependency between population and life expectency',col = 'green', log= 'y')
+```
+
+
+>### Conclusion
+
+In this task we want to find what factors can affect life expectancy.
+
+After research we got most valuable data using correlation, and check whether there is a linear relationship between school(most valuable data according to correlation), and life expectancy.
+
+To check this we just draw a plot, and just looking at it, it became clear that our hypothesis is not correct, our data in the first half is look like random, but in second half data became more and more reminiscent of linear regression.
+
+We also get that HIV affects life expectancy more than any other disease.
+
+Also according to correlation there is no strange relationship between population and life expetency, so we decide to draw plot to check this data a bit closer, and there wasn't any big relationship which was quite unexpected for us, because we think that life expectancy in Europe is higher and the population is smaller, which is why we should have a negative correlation.
